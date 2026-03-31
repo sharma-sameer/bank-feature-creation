@@ -1,0 +1,52 @@
+SchemaVersion: '1.0'
+SageMaker:
+  PythonSDK:
+    Modules:
+      RemoteFunction:
+        Dependencies: 'requirements.txt'
+        EnableInterContainerTrafficEncryption: true
+        ImageUri: "607826602275.dkr.ecr.us-east-1.amazonaws.com/ecr-public/sagemaker/sagemaker-distribution:3.8.1-cpu"
+        IncludeLocalWorkDir: true
+        CustomFileFilter: 
+          IgnoreNamePatterns:
+          # - "*.ipynb"
+          - "data"
+        InstanceType: 'ml.m5.24xlarge'
+        # JobCondaEnvironment: 'your_conda_env'
+        # PreExecutionCommands:
+        #     - 'command_1'
+        #     - 'command_2'
+        # PreExecutionScript: 'path/to/script.sh'
+        RoleArn: 'arn:aws:iam::607826602275:role/omwbp-iam_role-prod-data-science-modeling-ml-ue1-all'
+        # S3KmsKeyId: 'yourkmskeyid'
+        # S3RootUri: 's3://amzn-s3-demo-bucket/my-project'
+        VpcConfig:
+          SecurityGroupIds: 
+          - 'sg-0ddb40ad72fda922f'
+          Subnets: 
+          - 'subnet-0687ab966148eff3c'
+          - 'subnet-05bb7a3ce88547130'
+        # Tags: [{'Key': 'yourTagKey', 'Value':'yourTagValue'}]
+        # VolumeKmsKeyId: 'yourkmskeyid'
+      ModelTrainer:
+        TrainingImage: "607826602275.dkr.ecr.us-east-1.amazonaws.com/ecr-public/sagemaker/sagemaker-distribution:3.8.1-cpu"
+        RoleArn: 'arn:aws:iam::607826602275:role/omwbp-iam_role-prod-data-science-modeling-ml-ue1-all'
+        SourceCode:
+          SourceDir: '.'             # Path to your local directory with code
+          EntryScript: './src/divide.py'   # Script to run (relative to SourceDir)
+          Requirements: 'requirements.txt'
+        OutputDataConfig:
+          S3OutputPath: 's3://omwbp-s3-prod-data-science-modeling-shared-data-ue1-all/Sameer_S/bank_data_tables/output/'
+        Compute:
+          InstanceType: 'ml.m5.xlarge'
+          VolumeSizeInGB: 300
+        Networking:
+          EnableInterContainerTrafficEncryption: true
+          VpcConfig:
+            SecurityGroupIds: 
+            - 'sg-0ddb40ad72fda922f'
+            Subnets: 
+            - 'subnet-0687ab966148eff3c'
+            - 'subnet-05bb7a3ce88547130'
+        StoppingCondition:
+          MaxRuntimeInSeconds: 21600
