@@ -11,7 +11,7 @@ SageMaker:
           IgnoreNamePatterns:
           # - "*.ipynb"
           - "data"
-        InstanceType: 'ml.m5.24xlarge'
+        InstanceType: 'ml.m5.12xlarge'
         # JobCondaEnvironment: 'your_conda_env'
         # PreExecutionCommands:
         #     - 'command_1'

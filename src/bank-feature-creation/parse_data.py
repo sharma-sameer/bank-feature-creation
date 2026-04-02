@@ -132,6 +132,14 @@ for page in paginator.paginate(**kwargs):
         if "bank-feature-tables-" in folder_prefix.lower():
             data_directories.add(folder_prefix)
 
+completed = set()
+
+if Path("completed.txt").is_file():
+    with open('completed.txt', 'r') as file:
+        # .strip() removes newline characters (\n) and surrounding whitespace
+        completed = {line.strip() for line in file}
+
+data_directories = data_directories - completed
 logger.info(f"The directories to look for the data in: {data_directories}")
 
 for data_directory in data_directories:
@@ -139,5 +147,7 @@ for data_directory in data_directories:
         f"Getting list of all the parquet files in the directory s3://{bucket}/{data_directory}"
     )
     parse_parquet(bucket, data_directory)
+    with open("completed.txt", 'a') as f:
+        f.write(data_directory)
 
 logger.info("Processed all parquet files.")
