@@ -1,7 +1,7 @@
 from snowflake.connector.pandas_tools import write_pandas
-from datetime import datetime as dt
+from datetime import datetime as dt, time, date
 import datetime
-from get_connection import *
+from .get_connection import *
 import polars as pl
 from typing import Optional
 from ruamel.yaml import YAML
@@ -11,15 +11,12 @@ logger.info("Getting snowflake connector to save data.")
 
 yaml = YAML()
 yaml.preserve_quotes = True  # Optional: helps keep original quoting
-# config_path = Path.cwd() / "config" / "table_config.yaml"
-config_path = "table_config.yaml"
+config_path = Path.cwd() / "config" / "table_config.yaml"
+# config_path = "table_config.yaml"
 
 with open(config_path, "r") as f:
     config = yaml.load(f)
-if config:
-    logger.info(config)
-else:
-    logger.info("Could not read the config.")
+
 table_name = f"{config["table"][0]["name"]}_{config["table"][1]["version"]}"
 
 
@@ -60,17 +57,24 @@ def save_to_snowflake(table_df: pl.DataFrame) -> str:
             logger.info(
                 "Data inserted successfully. Now need to update the Metadata table to reflect the refresh time."
             )
+
             query = """UPDATE BANK_FEATURES_METADATA 
                 SET LAST_REFRESH_DATE = TO_TIMESTAMP(%s),
                 DATA_AS_OF_DATE = TO_TIMESTAMP(%s) 
                 WHERE TABLE_NAME = %s;"""
+            max_date = pl.read_database(
+                f"SELECT MAX(DATA_AS_OF_DATE) FROM BANK_FEATURES_METADATA WHERE TABLE_NAME='{table_name.upper()}'",
+                conn,
+            ).item(0, 0)
+            max_date = dt.combine(max_date, time.min) if max_date else dt.combine(date(2024, 1, 1), time.min)
             cursor.execute(
                 query,
                 (
                     insert_time,
-                    table_df["appl_entry_dt"]
-                    .max()
-                    .strftime("%Y-%m-%d %H:%M:%S"),
+                    max(
+                        dt.combine(table_df["appl_entry_dt"].max(), time.min),
+                        dt.combine(max_date, time.min),
+                    ).strftime("%Y-%m-%d %H:%M:%S"),
                     table_name.upper(),
                 ),
             )
@@ -85,6 +89,7 @@ def save_to_snowflake(table_df: pl.DataFrame) -> str:
             logger.info(
                 "Data inserted successfully. Now need to update the Metadata table to reflect the refresh time."
             )
+
             query = """INSERT INTO BANK_FEATURES_METADATA (TABLE_NAME, LAST_REFRESH_DATE, DATA_AS_OF_DATE)
                 VALUES(%s, 
                     TO_TIMESTAMP(%s), 
@@ -109,6 +114,7 @@ def save_to_snowflake(table_df: pl.DataFrame) -> str:
         logger.info(
             "Data inserted successfully. Now need to update the Metadata table to reflect the refresh time."
         )
+
         query = """INSERT INTO BANK_FEATURES_METADATA (TABLE_NAME, LAST_REFRESH_DATE, DATA_AS_OF_DATE)
             VALUES(%s, 
                    TO_TIMESTAMP(%s), 
@@ -150,14 +156,13 @@ def create_update_table(
         with open(config_path, "w") as f:
             yaml.dump(config, f)
 
-    logger.info("Using Database EDS.")
-    conn.cursor().execute("USE DATABASE EDS;")
-    logger.info("Using Database SB_DATA_SCIENCE.")
-    conn.cursor().execute("USE SCHEMA SB_DATA_SCIENCE;")
     logger.info(f"Inserting Data to table {table_name}")
     write_pandas(
         conn=conn,
         df=table_df.to_pandas(),
+        use_logical_type=True,
+        database="EDS",
+        schema="SB_DATA_SCIENCE",
         table_name=table_name.upper(),
         auto_create_table=True,
         overwrite=False,

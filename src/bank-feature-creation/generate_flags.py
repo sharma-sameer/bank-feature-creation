@@ -5,7 +5,7 @@ import logging
 from itertools import chain
 import gc
 import re
-from write_to_database import *
+from .write_to_database import *
 
 logging.basicConfig(
     level=logging.INFO,
@@ -120,10 +120,16 @@ def process_chunk(chunk):
 
     for f in files:
         df = pl.read_parquet(f)
-        df = df.with_columns(
-            pl.Series("DATA", [json.loads(s) for s in df["DATA"]], strict=False)
-        )
-        df = df.with_columns(pl.col("APPL_ENTRY_DT").cast(pl.Datetime("ms")))
+        try:
+            df = df.with_columns(
+                pl.Series(
+                    "DATA", [json.loads(s) for s in df["DATA"]], strict=False
+                )
+            )
+        except Exception as e:
+            logger.info(f"Data is: {df.head(1)}")
+            continue
+
         flags.append(get_flags(df))
 
     logger.info("Converting this 2D list to 1D list.")
@@ -134,6 +140,7 @@ def process_chunk(chunk):
 def get_flags(df):
 
     rows = df.partition_by("APPL_KEY", include_key=True)
+
     all_flags = []
     for this_iteration in rows:
         accounts = this_iteration["DATA"][0]["report"]["items"][0]

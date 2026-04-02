@@ -49,4 +49,4 @@ SageMaker:
             - 'subnet-0687ab966148eff3c'
             - 'subnet-05bb7a3ce88547130'
         StoppingCondition:
-          MaxRuntimeInSeconds: 21600
+          MaxRuntimeInSeconds: 0
