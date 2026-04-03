@@ -148,6 +148,6 @@ for data_directory in data_directories:
     )
     parse_parquet(bucket, data_directory)
     with open("completed.txt", 'a') as f:
-        f.write(data_directory)
+        f.write(f"{data_directory}\n")
 
 logger.info("Processed all parquet files.")
