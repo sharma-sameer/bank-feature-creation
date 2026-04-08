@@ -66,7 +66,11 @@ def save_to_snowflake(table_df: pl.DataFrame) -> str:
                 f"SELECT MAX(DATA_AS_OF_DATE) FROM BANK_FEATURES_METADATA WHERE TABLE_NAME='{table_name.upper()}'",
                 conn,
             ).item(0, 0)
-            max_date = dt.combine(max_date, time.min) if max_date else dt.combine(date(2024, 1, 1), time.min)
+            max_date = (
+                dt.combine(max_date, time.min)
+                if max_date
+                else dt.combine(date(2024, 1, 1), time.min)
+            )
             cursor.execute(
                 query,
                 (
@@ -104,6 +108,7 @@ def save_to_snowflake(table_df: pl.DataFrame) -> str:
                     .strftime("%Y-%m-%d %H:%M:%S"),
                 ),
             )
+            return True
 
     else:
         logger.info("The table needs to be created.")
@@ -128,7 +133,7 @@ def save_to_snowflake(table_df: pl.DataFrame) -> str:
             ),
         )
 
-    return "Saved to snowflake table successfully."
+    return False
 
 
 def create_update_table(
@@ -149,8 +154,8 @@ def create_update_table(
     global table_name
     if version_change:
         logger.info("Updating the table name.")
-        config["table"]["version"] += 1
-        table_name = f"{config["table"]["name"]}_{config["table"]["version"]}"
+        config["table"][1]["version"] += 1
+        table_name = f"{config["table"][0]["name"]}_{config["table"][1]["version"]}"
         logger.info(f"The new table name is {table_name}")
         logger.info("Updating the table version in config file.")
         with open(config_path, "w") as f:

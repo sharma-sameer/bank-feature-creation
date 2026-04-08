@@ -70,7 +70,7 @@ def parse_parquet(bucket, prefix):
 
     logger.info(f"Found {len(all_parquet_files)} files.")
     # NCPU = os.cpu_count()
-    NCPU = 20 # Because stupid snowflake.
+    NCPU = 20  # Because stupid snowflake.
     logger.info(f"Processing the files in {NCPU} threads.")
 
     # Parse first 25% files only.
@@ -111,7 +111,9 @@ def parse_parquet(bucket, prefix):
 
     logger.info("Mapping one chunks to a thread")
     with Pool(processes=NCPU) as pool:
-        pool.map(process_chunk, enumerate(chunks))
+        results = pool.map(process_chunk, enumerate(chunks))
+
+    return any(results)
 
 
 s3 = boto3.client("s3")
@@ -135,8 +137,7 @@ for page in paginator.paginate(**kwargs):
 completed = set()
 
 if Path("completed.txt").is_file():
-    with open('completed.txt', 'r') as file:
-        # .strip() removes newline characters (\n) and surrounding whitespace
+    with open("completed.txt", "r") as file:
         completed = {line.strip() for line in file}
 
 data_directories = data_directories - completed
@@ -146,8 +147,20 @@ for data_directory in data_directories:
     logger.info(
         f"Getting list of all the parquet files in the directory s3://{bucket}/{data_directory}"
     )
-    parse_parquet(bucket, data_directory)
-    with open("completed.txt", 'a') as f:
+    result = parse_parquet(bucket, data_directory)
+
+    if result:
+        config_path = Path.cwd() / "config" / "table_config.yaml"
+
+        with open(config_path, "r") as f:
+            config = yaml.load(f)
+
+        config["table"][1]["version"] += 1
+        logger.info("Updating the table version in config file.")
+        with open(config_path, "w") as f:
+            yaml.dump(config, f)
+
+    with open("completed.txt", "a") as f:
         f.write(f"{data_directory}\n")
 
 logger.info("Processed all parquet files.")
