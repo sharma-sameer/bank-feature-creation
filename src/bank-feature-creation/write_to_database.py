@@ -170,6 +170,7 @@ def create_update_table(
         schema="SB_DATA_SCIENCE",
         table_name=table_name.upper(),
         auto_create_table=True,
+        quote_identifiers=False,
         overwrite=False,
     )
     return

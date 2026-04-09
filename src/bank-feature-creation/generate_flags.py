@@ -45,6 +45,10 @@ with open(list_path / "DSA_Lookup_List.csv", mode="r", newline="") as f:
     reader = csv.reader(f)
     DSA_LOOKUP_LIST = {item.upper() for item in itertools.chain.from_iterable(reader)}
 
+with open(list_path / "Delivery_Services_Lookup_List.csv", mode="r", newline="") as f:
+    reader = csv.reader(f)
+    DELIVERY_SERVICES_LOOKUP_LIST = {item.upper() for item in itertools.chain.from_iterable(reader)}
+
 # pattern_bnpl = re.compile(
 #     r"\b(" + "|".join(re.escape(k) for k in BNPL_LOOKUP_LIST) + r")\b",
 #     re.IGNORECASE,
@@ -120,6 +124,9 @@ def get_flags(df):
         rideshare_flag_ever = rideshare_flag_30days = rideshare_flag_60days = (
             rideshare_flag_90days
         ) = rideshare_flag_6mo = False
+        delivery_services_flag_ever = delivery_services_flag_30days = delivery_services_flag_60days = (
+            delivery_services_flag_90days
+        ) = delivery_services_flag_6mo = False
         for account in accounts["accounts"]:
             balance_updated = this_iteration["APPL_ENTRY_DT"][0]
             cutoff_30_days = balance_updated - timedelta(days=30)
@@ -130,32 +137,28 @@ def get_flags(df):
             recent_transactions_30_days = [
                 item
                 for item in account["transactions"]
-                if item["amount"] < 0
-                and dt.strptime(item["date"], "%Y-%m-%d").date()
+                if dt.strptime(item["date"], "%Y-%m-%d").date()
                 >= cutoff_30_days
             ]
 
             recent_transactions_60_days = [
                 item
                 for item in account["transactions"]
-                if item["amount"] < 0
-                and dt.strptime(item["date"], "%Y-%m-%d").date()
+                if dt.strptime(item["date"], "%Y-%m-%d").date()
                 >= cutoff_60_days
             ]
 
             recent_transactions_90_days = [
                 item
                 for item in account["transactions"]
-                if item["amount"] < 0
-                and dt.strptime(item["date"], "%Y-%m-%d").date()
+                if dt.strptime(item["date"], "%Y-%m-%d").date()
                 >= cutoff_90_days
             ]
 
             recent_transactions_6mo = [
                 item
                 for item in account["transactions"]
-                if item["amount"] < 0
-                and dt.strptime(item["date"], "%Y-%m-%d").date() >= cutoff_6_mo
+                if dt.strptime(item["date"], "%Y-%m-%d").date() >= cutoff_6_mo
             ]
             if not bnpl_flag_ever:
                 bnpl_flag_ever = any(
@@ -362,6 +365,62 @@ def get_flags(df):
                     for item in recent_transactions_6mo
                     for keyword in DSA_LOOKUP_LIST
                 )
+            
+            if not delivery_services_flag_ever:
+                if (
+                    sum(
+                        keyword in item["original_description"].upper()
+                        for item in account["transactions"]
+                        if item["amount"] < 0
+                        for keyword in RIDESHARE_LOOKUP_LIST
+                    )
+                    >= 4
+                ):
+                    delivery_services_flag_ever = True
+
+                if (
+                    sum(
+                        keyword in item["original_description"].upper()
+                        for item in recent_transactions_30_days
+                        if item["amount"] < 0
+                        for keyword in RIDESHARE_LOOKUP_LIST
+                    )
+                    >= 4
+                ):
+                    delivery_services_flag_30days = True
+
+                if (
+                    sum(
+                        keyword in item["original_description"].upper()
+                        for item in recent_transactions_60_days
+                        if item["amount"] < 0
+                        for keyword in RIDESHARE_LOOKUP_LIST
+                    )
+                    >= 4
+                ):
+                    delivery_services_flag_60days = True
+
+                if (
+                    sum(
+                        keyword in item["original_description"].upper()
+                        for item in recent_transactions_90_days
+                        if item["amount"] < 0
+                        for keyword in RIDESHARE_LOOKUP_LIST
+                    )
+                    >= 4
+                ):
+                    delivery_services_flag_90days = True
+
+                if (
+                    sum(
+                        keyword in item["original_description"].upper()
+                        for item in recent_transactions_6mo
+                        if item["amount"] < 0
+                        for keyword in RIDESHARE_LOOKUP_LIST
+                    )
+                    >= 4
+                ):
+                    delivery_services_flag_6mo = True
 
         flags_dict = {
             "appl_key": this_iteration["APPL_KEY"][0],
@@ -396,6 +455,11 @@ def get_flags(df):
             "has_dsa_60_days": dsa_flag_60days,
             "has_dsa_90_days": dsa_flag_90days,
             "has_dsa_6mo": dsa_flag_6mo,
+            "has_delivery_services_ever": delivery_services_flag_ever,
+            "has_delivery_services_30_days": delivery_services_flag_30days,
+            "has_delivery_services_60_days": delivery_services_flag_60days,
+            "has_delivery_services_90_days": delivery_services_flag_90days,
+            "has_delivery_services_6mo": delivery_services_flag_6mo,
             "appl_entry_dt": this_iteration["APPL_ENTRY_DT"][0],
         }
         all_flags.append(flags_dict)
