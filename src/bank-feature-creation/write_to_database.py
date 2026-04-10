@@ -146,8 +146,8 @@ def create_update_table(
 
     Args:
         table_df (pl.DataFrame): Data to be inserted.
-        table_name (str): Name of the table to which the table is to be inserted.
         conn (SnowflakeConnection): A connection object to the snowflake database.
+        version_change (bool): Indicator if there is a change to the table structure. Default False.
     Returns:
         None
     """
@@ -155,7 +155,9 @@ def create_update_table(
     if version_change:
         logger.info("Updating the table name.")
         config["table"][1]["version"] += 1
-        table_name = f"{config["table"][0]["name"]}_{config["table"][1]["version"]}"
+        table_name = (
+            f"{config["table"][0]["name"]}_{config["table"][1]["version"]}"
+        )
         logger.info(f"The new table name is {table_name}")
         logger.info("Updating the table version in config file.")
         with open(config_path, "w") as f:

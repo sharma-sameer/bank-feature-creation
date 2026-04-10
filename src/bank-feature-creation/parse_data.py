@@ -10,7 +10,9 @@ from multiprocessing import Pool
 import logging
 from .generate_flags import *
 
+# Load the environment variables.
 load_dotenv()
+# Set up logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -30,23 +32,23 @@ logger.info(
 boto_session = boto3.Session(
     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    aws_session_token=os.getenv(
-        "AWS_SESSION_TOKEN"
-    ),  # Required for temporary/SSO keys
+    aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
     region_name="us-east-1",
 )
 
+# Establish sagemaker session.
 sm_session = Session(boto_session=boto_session)
 
 try:
     role = os.getenv("AWS_ROLE")
-    print(f"Execution role ARN: {role}")
+    logger.info(f"Execution role ARN: {role}")
 except ValueError:
-    print(
+    logger.info(
         "Could not find an execution role associated with the current environment."
     )
 
-settings = settings = dict(
+# Get all the arguments for sagemaker remote function as a dict.
+settings = dict(
     sagemaker_session=sm_session,
     instance_count=1,
     keep_alive_period_in_seconds=21600,
@@ -55,12 +57,21 @@ settings = settings = dict(
 
 
 @remote(**settings)
-def parse_parquet(bucket, prefix):
-    s3 = boto3.client("s3")
+def parse_parquet(bucket : str, prefix : str) -> bool:
+    """Function to parse all the parquet files in the s3 directory provided.
 
+    Args:
+        bucket (str): s3 bucket in which the parquet files are stored.
+        prefix (str): the directory path in the bucket where the parquet files are stored.
+
+    Returns:
+        Bool: Boolean value indicating if there has been a version change for the table.
+    """
+    # Get an s3 client
+    s3 = boto3.client("s3")
+    # list all the objects in the bucket directory.
     response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
 
-    # 2. Extract keys and slice to get only the first 10
     # Filter to ensure you only get .parquet files
     all_parquet_files = [
         f"s3://{bucket}/{obj['Key']}"
@@ -73,7 +84,7 @@ def parse_parquet(bucket, prefix):
     NCPU = 20  # Because stupid snowflake.
     logger.info(f"Processing the files in {NCPU} threads.")
 
-    # Parse first 25% files only.
+    # Parse all the files.
     files_to_process = all_parquet_files
     logger.info(
         f"Processing {len(files_to_process)}/{len(all_parquet_files)} files"
@@ -89,78 +100,72 @@ def parse_parquet(bucket, prefix):
     last = 0
 
     logger.info("Assigning the files to chunks.")
-
+    # Assign files to chunks.
     for size in exact_chunk_sizes:
         first = last
         last = first + size
         chunk = files_to_process[first:last]
         chunks.append(chunk)
 
-    def get_int_suffix(s):
-        suffix = re.match("chunks(.*)", s).group(1)
-        try:
-            return int(suffix)
-        except:
-            return 0
-
-    chunkfiles = glob.glob("chunks*")
-    if len(chunkfiles) == 0:
-        m = 0
-    else:
-        m = max(get_int_suffix(c) for c in glob.glob("chunks*"))
-
+    # Mapping the chunk to a thread to process subset of the files.
     logger.info("Mapping one chunks to a thread")
     with Pool(processes=NCPU) as pool:
-        results = pool.map(process_chunk, enumerate(chunks))
+        results = pool.map(process_chunk, chunks)
 
     return any(results)
 
 
-s3 = boto3.client("s3")
-paginator = s3.get_paginator("list_objects_v2")
+if __name__ == "__main__":
+    # Get the s3 client.
+    s3 = boto3.client("s3")
+    paginator = s3.get_paginator("list_objects_v2")
 
-bucket = "omwbp-s3-prod-data-science-modeling-shared-data-ue1-all"
-prefix = "Sameer_S/bank_data_tables/"
+    bucket = "omwbp-s3-prod-data-science-modeling-shared-data-ue1-all"
+    prefix = "Sameer_S/bank_data_tables/"
 
-kwargs = {"Bucket": bucket, "Delimiter": "/", "Prefix": prefix}
+    kwargs = {"Bucket": bucket, "Delimiter": "/", "Prefix": prefix}
 
-data_directories = set()
+    data_directories = set()
 
-for page in paginator.paginate(**kwargs):
-    # 'CommonPrefixes' acts like a list of subdirectories
-    for folder in page.get("CommonPrefixes", []):
-        folder_prefix = folder.get("Prefix")
-        # Check if the folder name contains 'bank-feature-tables-'
-        if "bank-feature-tables-" in folder_prefix.lower():
-            data_directories.add(folder_prefix)
+    # Get list of all the directories with parquet files we want to process.
 
-completed = set()
+    for page in paginator.paginate(**kwargs):
+        # 'CommonPrefixes' acts like a list of subdirectories
+        for folder in page.get("CommonPrefixes", []):
+            folder_prefix = folder.get("Prefix")
+            # Check if the folder name contains 'bank-feature-tables-'
+            if "bank-feature-tables-" in folder_prefix.lower():
+                data_directories.add(folder_prefix)
 
-if Path("completed.txt").is_file():
-    with open("completed.txt", "r") as file:
-        completed = {line.strip() for line in file}
+    # Get the directories not processed yet.
+    completed = set()
 
-data_directories = data_directories - completed
-logger.info(f"The directories to look for the data in: {data_directories}")
+    if Path("completed.txt").is_file():
+        with open("completed.txt", "r") as file:
+            completed = {line.strip() for line in file}
 
-for data_directory in data_directories:
-    logger.info(
-        f"Getting list of all the parquet files in the directory s3://{bucket}/{data_directory}"
-    )
-    result = parse_parquet(bucket, data_directory)
+    data_directories = data_directories - completed
+    logger.info(f"The directories to look for the data in: {data_directories}")
 
-    if result:
-        config_path = Path.cwd() / "config" / "table_config.yaml"
+    # Loop over the directories to be processed and get the data.
+    for data_directory in data_directories:
+        logger.info(
+            f"Getting list of all the parquet files in the directory s3://{bucket}/{data_directory}"
+        )
+        result = parse_parquet(bucket, data_directory)
 
-        with open(config_path, "r") as f:
-            config = yaml.load(f)
+        if result:
+            config_path = Path.cwd() / "config" / "table_config.yaml"
 
-        config["table"][1]["version"] += 1
-        logger.info("Updating the table version in config file.")
-        with open(config_path, "w") as f:
-            yaml.dump(config, f)
+            with open(config_path, "r") as f:
+                config = yaml.load(f)
 
-    with open("completed.txt", "a") as f:
-        f.write(f"{data_directory}\n")
+            config["table"][1]["version"] += 1
+            logger.info("Updating the table version in config file.")
+            with open(config_path, "w") as f:
+                yaml.dump(config, f)
 
-logger.info("Processed all parquet files.")
+        with open("completed.txt", "a") as f:
+            f.write(f"{data_directory}\n")
+
+    logger.info("Processed all parquet files.")
