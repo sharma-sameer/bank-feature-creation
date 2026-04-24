@@ -1,7 +1,7 @@
 from snowflake.connector.pandas_tools import write_pandas
 from datetime import datetime as dt, time, date
 import datetime
-from .get_connection import *
+from get_connection import *
 import polars as pl
 from typing import Optional
 from ruamel.yaml import YAML
@@ -17,7 +17,10 @@ config_path = Path.cwd() / "config" / "table_config.yaml"
 with open(config_path, "r") as f:
     config = yaml.load(f)
 
-table_name = f"{config["table"][0]["name"]}_{config["table"][1]["version"]}"
+logger.info(config)
+table_prefix = config["table"][0]["name"]
+tabel_version = config["table"][1]["version"]
+table_name = f"{tabel_prefix}_{tabel_version}"
 
 
 def save_to_snowflake(table_df: pl.DataFrame) -> str:
@@ -36,6 +39,7 @@ def save_to_snowflake(table_df: pl.DataFrame) -> str:
     cursor.execute("USE DATABASE EDS;")
     logger.info("Using Database SB_DATA_SCIENCE.")
     cursor.execute("USE SCHEMA SB_DATA_SCIENCE;")
+    logging.info(f"Writing to table {table_name}")
     logger.info("Checking if the table already exists.")
     if (
         conn.cursor().execute(f"SHOW TABLES LIKE '{table_name}'").fetchone()
