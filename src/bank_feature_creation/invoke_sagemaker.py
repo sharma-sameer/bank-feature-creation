@@ -6,6 +6,8 @@ from sagemaker.session import Session
 import logging
 from dotenv import load_dotenv
 from pathlib import Path
+import polars as pl
+from write_to_database import *
 
 load_dotenv()
 # Set up logging
@@ -70,8 +72,6 @@ estimator = PyTorch(
     },
 )
 
-logger.info("Estimator Created. Defining InputData.")
-
 logger.info("Starting the training job.")
 estimator.fit()
 
@@ -79,3 +79,12 @@ logger.info("Training job submitted.")
 # The job name is accessible directly
 training_job_name = estimator.latest_training_job.name
 logger.info(f"Job Completed: {training_job_name}")
+
+logger.info("Writing to database.")
+df = pl.scan_csv(
+    "s3://omwbp-s3-prod-data-science-modeling-shared-data-ue1-all/Sameer_S/bank_data_tables/bank-data-tables/output_updated.csv",
+    try_parse_dates=True,
+).collect()
+
+df = df.rename({"APPL_ENTRY_DT": "appl_entry_dt"})
+save_to_snowflake(df)

@@ -18,9 +18,7 @@ with open(config_path, "r") as f:
     config = yaml.load(f)
 
 logger.info(config)
-table_prefix = config["table"][0]["name"]
-tabel_version = config["table"][1]["version"]
-table_name = f"{tabel_prefix}_{tabel_version}"
+table_name = f'{config["table"][0]["name"]}_{config["table"][1]["version"]}'
 
 
 def save_to_snowflake(table_df: pl.DataFrame) -> str:
@@ -160,7 +158,7 @@ def create_update_table(
         logger.info("Updating the table name.")
         config["table"][1]["version"] += 1
         table_name = (
-            f"{config["table"][0]["name"]}_{config["table"][1]["version"]}"
+            f'{config["table"][0]["name"]}_{config["table"][1]["version"]}'
         )
         logger.info(f"The new table name is {table_name}")
         logger.info("Updating the table version in config file.")

@@ -1,7 +1,9 @@
 import boto3
+
 # from sagemaker.core.helper.session_helper import Session
 import os
 from dotenv import load_dotenv
+
 # from sagemaker.core.remote_function import remote
 import math
 import re
@@ -9,7 +11,8 @@ import glob
 from multiprocessing import Pool
 import logging
 from generate_flags import *
-from write_to_database import *
+# from write_to_database import *
+import s3fs
 
 # Load the environment variables.
 load_dotenv()
@@ -98,63 +101,10 @@ def parse_parquet(bucket: str, prefix: str) -> bool:
     with Pool(processes=NCPU) as pool:
         results = pool.map(process_chunk, chunks)
 
-    return any(results)
+    return pl.concat(results, how="diagonal")
 
 
 if __name__ == "__main__":
-    # # Get the s3 client.
-    # s3 = boto3.client("s3")
-    # paginator = s3.get_paginator("list_objects_v2")
-
-    # bucket = "omwbp-s3-prod-data-science-modeling-shared-data-ue1-all"
-    # prefix = "Sameer_S/bank_data_tables/"
-
-    # kwargs = {"Bucket": bucket, "Delimiter": "/", "Prefix": prefix}
-
-    # data_directories = set()
-
-    # # Get list of all the directories with parquet files we want to process.
-
-    # for page in paginator.paginate(**kwargs):
-    #     # 'CommonPrefixes' acts like a list of subdirectories
-    #     for folder in page.get("CommonPrefixes", []):
-    #         folder_prefix = folder.get("Prefix")
-    #         # Check if the folder name contains 'bank-feature-tables-'
-    #         if "bank-feature-tables-" in folder_prefix.lower():
-    #             data_directories.add(folder_prefix)
-
-    # # Get the directories not processed yet.
-    # completed = set()
-
-    # if Path("completed.txt").is_file():
-    #     with open("completed.txt", "r") as file:
-    #         completed = {line.strip() for line in file}
-
-    # data_directories = data_directories - completed
-    # logger.info(f"The directories to look for the data in: {data_directories}")
-
-    # # Loop over the directories to be processed and get the data.
-    # for data_directory in data_directories:
-    #     logger.info(
-    #         f"Getting list of all the parquet files in the directory s3://{bucket}/{data_directory}"
-    #     )
-    #     result = parse_parquet(bucket, data_directory)
-
-    #     if result:
-    #         config_path = Path.cwd() / "config" / "table_config.yaml"
-
-    #         with open(config_path, "r") as f:
-    #             config = yaml.load(f)
-
-    #         config["table"][1]["version"] += 1
-    #         logger.info("Updating the table version in config file.")
-    #         with open(config_path, "w") as f:
-    #             yaml.dump(config, f)
-
-    #     with open("completed.txt", "a") as f:
-    #         f.write(f"{data_directory}\n")
-
-    # logger.info("Processed all parquet files.")
 
     # 1. Get the instance's rank (0 through 4)
     # SageMaker provides this via 'sagemaker_host' or environmental variables
@@ -173,15 +123,15 @@ if __name__ == "__main__":
     dfs = [parse_parquet(bucket, path) for path in input_directories]
     result = pl.concat(dfs, how="diagonal")
 
-    # s3_path = "s3://omwbp-s3-prod-data-science-modeling-shared-data-ue1-all/Sameer_S/bank_data_tables/bank-data-tables/output_updated.csv"
+    s3_path = "s3://omwbp-s3-prod-data-science-modeling-shared-data-ue1-all/Sameer_S/bank_data_tables/bank-data-tables/output_updated.csv"
 
-    # logger.info(f"Writing data to file Data to table {s3_path}")
+    logger.info(f"Writing data to file Data to table {s3_path}")
 
     # # Initialize the filesystem
-    # fs = s3fs.S3FileSystem()
-    # file_exists = fs.exists(s3_path)
+    fs = s3fs.S3FileSystem()
+    file_exists = fs.exists(s3_path)
 
-    # with fs.open(s3_path, "ab") as f:
-    #     result.write_csv(f, include_header=not file_exists)
-    save_to_snowflake(result)
+    with fs.open(s3_path, "ab") as f:
+        result.write_csv(f, include_header=not file_exists)
+    # save_to_snowflake(result)
     logger.info("Process Completed Successfully.")
